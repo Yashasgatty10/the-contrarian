@@ -6,102 +6,64 @@ from app.services.vector_search import search_knowledge
 
 load_dotenv()
 
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+client = genai.Client(
+    api_key=os.getenv("GEMINI_API_KEY")
+)
 
 
-def generate_rebuttal(argument: str, history=[]):
+def generate_rebuttal(argument: str, history=None):
 
-    # Retrieve relevant knowledge from MongoDB Vector Search
+    if history is None:
+        history = []
+
+    # Retrieve knowledge
     knowledge = search_knowledge(argument)
 
-    # Build context for Gemini
-    context = "\n\n".join(
-        f"""
-Type: {item['type']}
-Title: {item['title']}
-Description: {item['description']}
+    # Build context safely
+    context = ""
+
+    for item in knowledge:
+        context += f"""
+Type: {item.get("type", "Unknown")}
+Title: {item.get("title", "Unknown")}
+Description: {item.get("description", "")}
 Examples: {", ".join(item.get("examples", []))}
-Similarity Score: {item['score']:.3f}
+Similarity Score: {item.get("score", 0):.3f}
+
 """
-        for item in knowledge
-    )
 
     # Build conversation history
     history_text = ""
 
     for message in history:
-        role = "User" if message["role"] == "user" else "The Contrarian"
-        history_text += f"{role}: {message['content']}\n"
+        role = "User" if message.get("role") == "user" else "The Contrarian"
+        history_text += f"{role}: {message.get('content','')}\n"
 
     prompt = f"""
-You are **The Contrarian**, an AI assistant that respectfully challenges ideas using logic, evidence, psychology, history, economics, science, and critical thinking.
+You are The Contrarian.
 
-Your purpose is NOT to disagree for the sake of disagreement.
+Your role is to respectfully challenge ideas using logic,
+critical thinking and evidence.
 
-Your mission is to:
-
-• Identify hidden assumptions.
-• Detect cognitive biases.
-• Detect logical fallacies.
-• Highlight trade-offs and unintended consequences.
-• Apply decision-making principles.
-• Present alternative perspectives.
-• Encourage critical thinking.
-
-----------------------------
-
-PREVIOUS CONVERSATION
+Previous Conversation
 
 {history_text}
 
-----------------------------
+-----------------------------------
 
-USER ARGUMENT
+User Argument
 
 "{argument}"
 
-----------------------------
+-----------------------------------
 
-RETRIEVED KNOWLEDGE
+Retrieved Knowledge
 
 {context}
 
-----------------------------
+-----------------------------------
 
-INSTRUCTIONS
-
-1. Treat the retrieved knowledge as your PRIMARY evidence.
-
-2. Use the retrieved knowledge whenever it is relevant.
-
-3. Use the previous conversation to maintain context and continuity.
-
-4. If the retrieved knowledge is insufficient, supplement it with generally accepted knowledge and logical reasoning.
-
-5. Never ignore relevant retrieved knowledge.
-
-6. Never fabricate facts, statistics, studies or historical events.
-
-7. Clearly distinguish between:
-
-   • Retrieved Evidence
-   • Additional Reasoning
-
-8. If no retrieved document matches a section, simply state:
-
-   "No directly relevant retrieved evidence."
-
-9. Be respectful and intellectually honest.
-
-10. Do not attack the user.
-
-11. If the user's argument has valid points, acknowledge them before presenting counterarguments.
-
-12. Your goal is to improve the user's thinking—not to win the debate.
-
-----------------------------
-
-Return the answer in Markdown exactly in this format.
+Respond in Markdown using this format:
 
 # Counterargument
 
@@ -109,25 +71,19 @@ Return the answer in Markdown exactly in this format.
 
 # Cognitive Biases
 
-- ...
+...
 
 # Logical Fallacies
 
-- ...
+...
 
 # Historical Evidence
 
-## Retrieved Evidence
-
-- ...
-
-## Additional Reasoning
-
-- ...
+...
 
 # Decision Principles
 
-- ...
+...
 
 # Conclusion
 
@@ -135,9 +91,15 @@ Return the answer in Markdown exactly in this format.
 """
 
     response = client.models.generate_content(
-        model="gemini-3.5-flash",
+        model="gemini-2.5-flash",
         contents=prompt
     )
+
+    if response is None:
+        raise Exception("Gemini returned no response.")
+
+    if not getattr(response, "text", None):
+        raise Exception("Gemini returned an empty response.")
 
     return {
         "argument": argument,
@@ -146,9 +108,9 @@ Return the answer in Markdown exactly in this format.
         "used_additional_reasoning": True,
         "sources": [
             {
-                "title": item["title"],
-                "type": item["type"],
-                "score": round(item["score"], 3)
+                "title": item.get("title", "Unknown"),
+                "type": item.get("type", "Unknown"),
+                "score": round(item.get("score", 0), 3)
             }
             for item in knowledge
         ]

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+import traceback
 
 from app.services.agent import generate_rebuttal
 
@@ -16,16 +17,16 @@ def debate(request: DebateRequest):
 
     try:
 
-        result = generate_rebuttal(
+        return generate_rebuttal(
             argument=request.argument,
             history=request.history
         )
 
-        return result
-
     except Exception as e:
+
+        traceback.print_exc()
 
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to generate rebuttal: {str(e)}"
+            detail=str(e)
         )
