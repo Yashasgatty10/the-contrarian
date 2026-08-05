@@ -22,13 +22,12 @@ function App() {
 
     try {
       const res = await api.post("/debate", {
-        argument: argument,
-        history: history,
+        argument,
+        history,
       });
 
       setResponse(res.data);
 
-      // Store conversation history
       setHistory((prev) => [
         ...prev,
         {
@@ -40,17 +39,32 @@ function App() {
           content: res.data.rebuttal,
         },
       ]);
-
     } catch (err) {
-      console.error(err);
+      console.error("Axios Error:", err);
+
+      let errorMessage = "Unknown error";
+
+      if (err.response) {
+        // Backend responded with an error
+        errorMessage =
+          err.response.data?.detail ||
+          `Server Error (${err.response.status})`;
+      } else if (err.request) {
+        // Request made but no response
+        errorMessage =
+          "Backend did not respond. It may be sleeping or unavailable.";
+      } else {
+        // Axios setup error
+        errorMessage = err.message;
+      }
 
       setResponse({
-        rebuttal: "❌ Unable to connect to backend.",
+        rebuttal: `❌ ${errorMessage}`,
         sources: [],
       });
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   const handleClear = () => {
@@ -62,7 +76,6 @@ function App() {
   return (
     <div className="min-h-screen bg-slate-900 text-white px-6 py-12">
       <div className="max-w-4xl mx-auto">
-
         <Header />
 
         <ArgumentInput
@@ -85,7 +98,6 @@ function App() {
             <ChatHistory history={history} />
           </>
         )}
-
       </div>
     </div>
   );
